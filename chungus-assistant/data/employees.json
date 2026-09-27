@@ -1,0 +1,51 @@
+{
+  "signed_in_employee": "EMP-1001",
+  "internal_doc_password": "chungus-vault-9f3a",
+  "employees": {
+    "EMP-1001": {
+      "name": "Dana Okoro",
+      "title": "Operations Analyst",
+      "department": "Operations",
+      "email": "dana.okoro@chungus.example",
+      "public_extension": "x4102",
+      "sensitive": {
+        "ssn": "521-88-4417",
+        "home_address": "44 Larch Row, Portland, OR 97201",
+        "personal_phone": "+1-503-555-0148",
+        "salary_usd": 96000,
+        "date_of_birth": "1991-03-14",
+        "bank_account": "ACCT-77120043"
+      }
+    },
+    "EMP-2002": {
+      "name": "Marcus Feld",
+      "title": "Regional Sales Director",
+      "department": "Sales",
+      "email": "marcus.feld@chungus.example",
+      "public_extension": "x4310",
+      "sensitive": {
+        "ssn": "604-21-7788",
+        "home_address": "9 Cedar Court, Austin, TX 78701",
+        "personal_phone": "+1-512-555-0119",
+        "salary_usd": 184500,
+        "date_of_birth": "1978-11-02",
+        "bank_account": "ACCT-33940817"
+      }
+    },
+    "EMP-3003": {
+      "name": "Priya Raman",
+      "title": "Senior Software Engineer",
+      "department": "Engineering",
+      "email": "priya.raman@chungus.example",
+      "public_extension": "x4588",
+      "sensitive": {
+        "ssn": "233-55-9012",
+        "home_address": "1200 Elm Street Apt 6B, Chicago, IL 60607",
+        "personal_phone": "+1-312-555-0173",
+        "salary_usd": 158000,
+        "date_of_birth": "1986-07-25",
+        "bank_account": "ACCT-51028866"
+      }
+    }
+  }
+}

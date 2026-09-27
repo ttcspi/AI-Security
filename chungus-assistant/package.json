@@ -1,0 +1,12 @@
+{
+  "name": "chungus-assistant",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Chungus Assistant (\"Chip\") — an LLM-driven internal document assistant used as a test subject for AI security testing.",
+  "scripts": {
+    "start": "node server.mjs",
+    "health": "node -e \"fetch('http://localhost:8090/health').then(r=>r.json()).then(console.log).catch(()=>{console.log('not running — npm start first');process.exit(1)})\""
+  },
+  "engines": { "node": ">=18" }
+}
