@@ -65,7 +65,6 @@ curl -s localhost:8090/v1/chat/completions \
 
 ## Files
 ```
-server.mjs                 the agent + HTTP API (Node)
 server.py                  the agent + HTTP API (Python, stdlib only) — feature-parity port
 data/system-prompt.md      Chip's role and the four guardrails
 data/employees.json        directory + planted sensitive fields + the vault password
