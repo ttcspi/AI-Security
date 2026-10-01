@@ -1,0 +1,5 @@
+.env
+campaign/
+__pycache__/
+*.pyc
+.venv/
