@@ -32,12 +32,19 @@ cp .env.example .env      # already set to the Chungus profile on :8090
 
 Start the target first (in `../chungus-assistant`): `python3 server.py` (listens on :8090).
 
+Then use the `./attack` launcher:
+
 ```bash
-python3 attacker.py       # Day 5 — run the campaign, write candidate findings
-python3 verify.py         # Day 6 — reproduce 3×, gate, and promote confirmed findings
+./attack start       # Day 5 — run the campaign, write candidate findings  (= python3 attacker.py)
+./attack verify      # Day 6 — reproduce 3×, gate, and promote confirmed findings  (= python3 verify.py)
+./attack health      # check the target is up
+./attack clean       # delete the campaign/ workspace
 ```
 
-Tuning knobs (`EPISODES`, `MAX_TURNS`, `ATTACK_DELAY_MS`, `REPRO_RUNS`, …) are env vars — see `.env.example`.
+The plain scripts still work (`python3 attacker.py`, `python3 verify.py`) if you prefer.
+
+Tuning knobs (`EPISODES`, `MAX_TURNS`, `ATTACK_DELAY_MS`, `REPRO_RUNS`, …) are env vars — pass them through
+the launcher, e.g. `EPISODES=3 ./attack start`. See `.env.example`.
 
 ## Targets
 
