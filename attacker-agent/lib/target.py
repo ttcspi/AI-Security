@@ -14,16 +14,16 @@ import urllib.error
 import urllib.request
 
 # TARGET_PROFILE=chungus points the adapter at the local Chungus Assistant (same envelope).
-# The default profile is the Week-2 MerciBank target. Chungus is the one this project iterates on.
+# The default profile is the Week-2 Chungus Bank target. Chungus is the one this project iterates on.
 CHUNGUS = os.environ.get("TARGET_PROFILE") == "chungus"
 if CHUNGUS:
     TARGET_URL = os.environ.get("CHUNGUS_TARGET_URL", "http://localhost:8090/v1/chat/completions")
     TARGET_KEY = os.environ.get("CHUNGUS_TARGET_KEY", "chungus-lab-key")
     TARGET_MODEL = "chungus-assistant"
 else:
-    TARGET_URL = os.environ.get("MERCI_TARGET_URL", "http://localhost:8080/v1/chat/completions")
-    TARGET_KEY = os.environ.get("MERCI_TARGET_KEY", "merci-lab-key")
-    TARGET_MODEL = "merci-assistant"
+    TARGET_URL = os.environ.get("CHUNGUS_BANK_TARGET_URL", "http://localhost:8080/v1/chat/completions")
+    TARGET_KEY = os.environ.get("CHUNGUS_BANK_TARGET_KEY", "chungus-bank-lab-key")
+    TARGET_MODEL = "chungus-bank-assistant"
 
 if not re.match(r"^https?://(localhost|127\.0\.0\.1)(:|/)", TARGET_URL):
     print(f'\n  REFUSING: target URL is "{TARGET_URL}".')
@@ -115,8 +115,8 @@ if CHUNGUS:
 else:
     target_info = {
         "url": TARGET_URL,
-        "name": "MerciBank",
-        "bot": "Merci",
-        "startHint": "Start it in ../week2-mercibank with `npm start`.",
-        "keyHint": "put MERCI_LLM_API_KEY in ../week2-mercibank/.env.",
+        "name": "Chungus Bank",
+        "bot": "Chungus Bank",
+        "startHint": "Start it in ../week2-chungus-bank with `npm start`.",
+        "keyHint": "put CHUNGUS_BANK_LLM_API_KEY in ../week2-chungus-bank/.env.",
     }

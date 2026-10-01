@@ -148,8 +148,8 @@ def main():
         repro = (f.get("verification") or {}).get("reproduced", "-")
         print(f"   {f['id']:<20} {f['goal']:<18} {repro:<7} {badge}  {c.dim(f.get('aivssHint', ''))}")
     print(f"\n  {c.bold('confirmed:')} {len(confirmed)}/{len(candidates)} → {c.dim(str(mem.paths['REGRESSION']) + '/')}")
-    key_var = "CHUNGUS_TARGET_KEY" if os.environ.get("TARGET_PROFILE") == "chungus" else "MERCI_TARGET_KEY"
-    key_val = "chungus-lab-key" if os.environ.get("TARGET_PROFILE") == "chungus" else "merci-lab-key"
+    key_var = "CHUNGUS_TARGET_KEY" if os.environ.get("TARGET_PROFILE") == "chungus" else "CHUNGUS_BANK_TARGET_KEY"
+    key_val = "chungus-lab-key" if os.environ.get("TARGET_PROFILE") == "chungus" else "chungus-bank-lab-key"
     print(c.dim(f"  run the promoted suite:  export {key_var}={key_val}; cd campaign/regression && "
                 "npx -y promptfoo@latest eval -c <id>.gen.yaml --no-cache\n"))
 

@@ -13,10 +13,10 @@ _CHUNGUS = os.environ.get("TARGET_PROFILE") == "chungus"
 _TARGET_URL = (
     os.environ.get("CHUNGUS_TARGET_URL", "http://localhost:8090/v1/chat/completions")
     if _CHUNGUS
-    else os.environ.get("MERCI_TARGET_URL", "http://localhost:8080/v1/chat/completions")
+    else os.environ.get("CHUNGUS_BANK_TARGET_URL", "http://localhost:8080/v1/chat/completions")
 )
-_KEY_VAR = "CHUNGUS_TARGET_KEY" if _CHUNGUS else "MERCI_TARGET_KEY"
-_LABEL = "chungus-http" if _CHUNGUS else "merci-http"
+_KEY_VAR = "CHUNGUS_TARGET_KEY" if _CHUNGUS else "CHUNGUS_BANK_TARGET_KEY"
+_LABEL = "chungus-http" if _CHUNGUS else "chungus-bank-http"
 
 
 def _assertions_for(goal):
@@ -33,7 +33,7 @@ def to_regression_yaml(finding):
     asserts = "\n".join(
         f"      - {{ type: not-contains, value: {json.dumps(s)} }}" for s in strings
     )
-    bot = "CHIP" if _CHUNGUS else "MERCI"
+    bot = "CHIP" if _CHUNGUS else "CHUNGUS BANK"
     transcript_comment = "\n".join(
         f"#   {i + 1}. YOU:   {t['user']}\n#      {bot}: {' '.join(str(t['reply']).split())[:100]}"
         for i, t in enumerate(transcript)
@@ -54,7 +54,7 @@ def to_regression_yaml(finding):
 # NOTE: multi-turn findings are collapsed into one prompt here for a portable single-turn regression.
 # For a faithful multi-turn replay, use a session-aware provider.
 #
-#   export {_KEY_VAR}={'chungus-lab-key' if _CHUNGUS else 'merci-lab-key'}
+#   export {_KEY_VAR}={'chungus-lab-key' if _CHUNGUS else 'chungus-bank-lab-key'}
 #   npx -y promptfoo@latest eval -c {finding['id']}.gen.yaml --no-cache && npx -y promptfoo@latest view
 
 description: "{finding['id']} — {finding['title']} (regression)"
