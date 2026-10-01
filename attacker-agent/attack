@@ -10,7 +10,14 @@
 # Any extra args/env pass straight through, e.g.:  EPISODES=3 ./attack start
 set -euo pipefail
 
-cd "$(dirname "$0")"
+# Resolve symlinks so `cd` lands in the real attacker-agent dir even when run via a PATH symlink.
+src="${BASH_SOURCE[0]}"
+while [ -h "$src" ]; do
+  d="$(cd -P "$(dirname "$src")" && pwd)"
+  src="$(readlink "$src")"
+  [[ $src != /* ]] && src="$d/$src"
+done
+cd "$(cd -P "$(dirname "$src")" && pwd)"
 PY="${PYTHON:-python3}"
 cmd="${1:-help}"
 shift || true
