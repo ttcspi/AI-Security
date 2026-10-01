@@ -1,0 +1,2 @@
+# No third-party dependencies — attacker-agent uses only the Python standard library.
+# Requires Python 3.10+ (for the X | None type syntax in lib/env.py).
