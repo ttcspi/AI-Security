@@ -49,7 +49,7 @@ the launcher, e.g. `EPISODES=3 ./attack start`. See `.env.example`.
 ## Targets
 
 `TARGET_PROFILE=chungus` (the default in `.env.example`) attacks Chip on :8090 with the Chungus playbook and
-canaries. With `TARGET_PROFILE` unset, the agent falls back to a Week-2 MerciBank target on :8080.
+canaries. With `TARGET_PROFILE` unset, the agent falls back to a Week-2 Chungus Bank target on :8080.
 
 ## What is NOT auto-graded
 
