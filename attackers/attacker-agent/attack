@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+# attack — a thin launcher for the attacker-agent so you don't type `python3 attacker.py`.
+#
+#   ./attack start [<target>]     run a campaign  (default target, or a named one)
+#   ./attack start --all          run a campaign against EVERY registered target
+#   ./attack verify [<target>]    reproduce + promote findings
+#   ./attack health [<target>]    check a target is up
+#   ./attack list                 list registered targets (from targets.json)
+#   ./attack clean [<target>]     delete the campaign workspace
+#   ./attack help                 show this
+#
+# <target> is a name from targets.json (e.g. chungus-hr, chungus-bank); omit it to use the default.
+# Env/args pass straight through, e.g.:  EPISODES=3 ./attack start chungus-bank
+set -euo pipefail
+
+# Resolve symlinks so `cd` lands in the real attacker-agent dir even when run via a PATH symlink.
+src="${BASH_SOURCE[0]}"
+while [ -h "$src" ]; do
+  d="$(cd -P "$(dirname "$src")" && pwd)"
+  src="$(readlink "$src")"
+  [[ $src != /* ]] && src="$d/$src"
+done
+cd "$(cd -P "$(dirname "$src")" && pwd)"
+PY="${PYTHON:-python3}"
+
+list_targets() { "$PY" -c "import json;print('\n'.join(json.load(open('targets.json'))['targets']))"; }
+default_target() { "$PY" -c "import json;print(json.load(open('targets.json')).get('default',''))"; }
+is_target() { list_targets | grep -qx "$1"; }
+usage() { sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; }
+
+# If the first remaining arg names a target, consume it into $TARGET; otherwise leave args untouched.
+take_target() {
+  if [ "${1:-}" != "" ] && [[ ${1:-} != -* ]]; then
+    if is_target "$1"; then
+      export TARGET="$1"
+      return 0  # caller should shift
+    else
+      echo "  unknown target: $1  (known: $(list_targets | paste -sd, -))" >&2
+      exit 2
+    fi
+  fi
+  return 1
+}
+
+run_health() {
+  "$PY" - <<'PYEOF'
+import lib.env  # loads .env
+from lib.target import health, target_info
+try:
+    h = health()
+    print(f"  [{target_info['target']}] {target_info['name']} up at {target_info['url']}")
+    print(f"           model={h.get('model')}  hasKey={h.get('hasKey')}")
+except Exception as e:
+    print(f"  [{target_info['target']}] {target_info['name']} NOT reachable at {target_info['url']}: {e}")
+    print(f"           {target_info['startHint']}")
+    raise SystemExit(1)
+PYEOF
+}
+
+cmd="${1:-help}"
+shift || true
+
+case "$cmd" in
+  start | attack | run)
+    if [ "${1:-}" = "--all" ] || [ "${1:-}" = "all" ]; then
+      shift || true
+      for t in $(list_targets); do
+        echo "══════ campaign against $t ══════"
+        TARGET="$t" CAMPAIGN_DIR="campaign-$t" "$PY" attacker.py "$@" || echo "  ($t campaign exited non-zero)"
+      done
+    else
+      take_target "${1:-}" && shift || true
+      exec "$PY" attacker.py "$@"
+    fi
+    ;;
+  verify)
+    take_target "${1:-}" && shift || true
+    exec "$PY" verify.py "$@"
+    ;;
+  health)
+    if [ "${1:-}" = "--all" ] || [ "${1:-}" = "all" ]; then
+      for t in $(list_targets); do TARGET="$t" run_health || true; done
+    else
+      take_target "${1:-}" && shift || true
+      run_health
+    fi
+    ;;
+  list)
+    def="$(default_target)"
+    echo "  registered targets (default: $def):"
+    list_targets | sed 's/^/    - /'
+    ;;
+  clean)
+    if take_target "${1:-}"; then
+      dir="campaign-$TARGET"
+    else
+      dir="${CAMPAIGN_DIR:-campaign}"
+    fi
+    rm -rf "$dir"
+    echo "  removed $dir/"
+    ;;
+  help | -h | --help)
+    usage
+    ;;
+  *)
+    echo "  unknown command: $cmd" >&2
+    usage >&2
+    exit 2
+    ;;
+esac

@@ -1,0 +1,14 @@
+{
+  "_comment": "Target registry. Each entry ties a target NAME to: its manifest.json (owned by the target, declaring connection + canaries/flags/impacts) and the attacker-side strategy module (how to attack it). Add a target = one folder + manifest + one entry here + a strategy module. Select at run time with TARGET=<name> (default below), e.g. `attack start chungus-bank`.",
+  "default": "chungus-hr",
+  "targets": {
+    "chungus-hr": {
+      "manifest": "../../targets/chungus-hr/manifest.json",
+      "strategies": "chungus_hr_strategies"
+    },
+    "chungus-bank": {
+      "manifest": "../../targets/chungus-bank/manifest.json",
+      "strategies": "chungus_bank_strategies"
+    }
+  }
+}
