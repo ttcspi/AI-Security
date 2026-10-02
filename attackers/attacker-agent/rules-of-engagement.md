@@ -4,11 +4,12 @@ The rule that separates a security engineer from an attacker: **no written autho
 This document is your authorization for this project, and it is narrow on purpose.
 
 ## Authorization
-You are authorized to run this attacker agent against **the Chungus Assistant lab target you run on your own
-machine**, for the purpose of learning and practicing agentic red-teaming.
+You are authorized to run this attacker agent against **the Chungus lab targets you run on your own
+machine** (the apps in `../../targets/`), for the purpose of learning and practicing agentic red-teaming.
 
 ## In scope
-- **Only** your own local Chungus Assistant at `http://localhost:8090` (the `../chungus-assistant` target).
+- **Only** your own local targets on localhost — Chungus HR Assistant (`:8090`) and Chungus Bank (`:8080`),
+  the apps under `../../targets/`.
 - The attacker agent (`attacker.py`, `verify.py`) and its `campaign/` workspace on your machine.
 
 ## Out of scope (never)
@@ -25,7 +26,7 @@ machine**, for the purpose of learning and practicing agentic red-teaming.
 
 ## Kill switch
 - Stop the attacker: `Ctrl-C`.
-- Stop the target: `Ctrl-C` in the Chungus Assistant terminal.
+- Stop a target: `Ctrl-C` in that target's terminal.
 
 ## Evidence handling
 - Findings, transcripts, and canary values live in `campaign/` on your machine. Do not paste canary values

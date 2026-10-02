@@ -1,33 +1,44 @@
-# target.py — the adapter that talks to the agent under test.
-# This is the ONLY place that knows the target's HTTP envelope. Everything else calls Conversation.say().
+# target.py — the adapter that talks to the agent under test, and the single place that resolves WHICH
+# target is active. Selection is data-driven:
 #
-# It mirrors the Week-2 shape: POST /v1/chat/completions, a bearer token, a JSON body, and a non-OpenAI
-# reply at reply.text. Multi-turn works by passing the SAME session_id back.
+#   targets.json (attacker-side registry)  ->  name -> {manifest path, strategy module}
+#   <target>/manifest.json (target-side)   ->  connection (url/model/key) + canaries/flags/impacts
 #
-# Rules of engagement: the target URL must point at YOUR OWN local agent (localhost only).
-# Nothing else. See rules-of-engagement.md.
+# Pick a target with the TARGET env var (default: the registry's "default"), e.g.  TARGET=chungus-bank.
+# Everything else (strategies.py, judge.py, promote.py) reads what this module resolves, so adding a target
+# never touches code — just a folder, a manifest, a strategy module, and one registry line.
+#
+# Rules of engagement: the resolved URL must be localhost. Nothing else. See rules-of-engagement.md.
 import json
 import os
 import re
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 
-# TARGET_PROFILE=chungus points the adapter at the local Chungus Assistant (same envelope).
-# The default profile is the Week-2 Chungus Bank target. Chungus is the one this project iterates on.
-CHUNGUS = os.environ.get("TARGET_PROFILE") == "chungus"
-if CHUNGUS:
-    TARGET_URL = os.environ.get("CHUNGUS_TARGET_URL", "http://localhost:8090/v1/chat/completions")
-    TARGET_KEY = os.environ.get("CHUNGUS_TARGET_KEY", "chungus-lab-key")
-    TARGET_MODEL = "chungus-assistant"
-else:
-    TARGET_URL = os.environ.get("CHUNGUS_BANK_TARGET_URL", "http://localhost:8080/v1/chat/completions")
-    TARGET_KEY = os.environ.get("CHUNGUS_BANK_TARGET_KEY", "chungus-bank-lab-key")
-    TARGET_MODEL = "chungus-bank-assistant"
+ROOT = Path(__file__).resolve().parent.parent  # the attacker-agent dir
+REGISTRY = json.loads((ROOT / "targets.json").read_text())
+
+ACTIVE = os.environ.get("TARGET") or REGISTRY.get("default")
+_targets = REGISTRY.get("targets", {})
+if ACTIVE not in _targets:
+    raise SystemExit(
+        f"\n  Unknown TARGET={ACTIVE!r}. Known targets: {', '.join(_targets)}.\n"
+        f"  Set TARGET=<name> or edit targets.json.\n"
+    )
+
+_entry = _targets[ACTIVE]
+MANIFEST = json.loads((ROOT / _entry["manifest"]).resolve().read_text())
+STRATEGY_MODULE = _entry["strategies"]  # read by strategies.py
+
+TARGET_URL = os.environ.get(MANIFEST.get("url_env", ""), MANIFEST["url"])
+TARGET_KEY = os.environ.get(MANIFEST["key_env"], MANIFEST["key_default"])
+TARGET_MODEL = MANIFEST["model"]
 
 if not re.match(r"^https?://(localhost|127\.0\.0\.1)(:|/)", TARGET_URL):
-    print(f'\n  REFUSING: target URL is "{TARGET_URL}".')
-    print("  This lab attacks your OWN local agent only (localhost). See rules-of-engagement.md.\n")
+    print(f'\n  REFUSING: target URL for "{ACTIVE}" is "{TARGET_URL}".')
+    print("  This lab attacks your OWN local agents only (localhost). See rules-of-engagement.md.\n")
     raise SystemExit(1)
 
 
@@ -103,20 +114,17 @@ def health():
         return json.loads(resp.read().decode())  # { ok, model, hasKey }
 
 
-# Display names + startup hints for the selected target, so logs and the attacker prompt name the right bot.
-if CHUNGUS:
-    target_info = {
-        "url": TARGET_URL,
-        "name": "Chungus Assistant",
-        "bot": "Chip",
-        "startHint": "Start it in the chungus-assistant folder with `python3 server.py`.",
-        "keyHint": "put CHUNGUS_LLM_API_KEY in chungus-assistant/.env.",
-    }
-else:
-    target_info = {
-        "url": TARGET_URL,
-        "name": "Chungus Bank",
-        "bot": "Chungus Bank",
-        "startHint": "Start it in ../week2-chungus-bank with `npm start`.",
-        "keyHint": "put CHUNGUS_BANK_LLM_API_KEY in ../week2-chungus-bank/.env.",
-    }
+# Display names + startup hints for the active target, so logs and the attacker prompt name the right bot.
+target_info = {
+    "target": ACTIVE,
+    "url": TARGET_URL,
+    "name": MANIFEST["name"],
+    "bot": MANIFEST["bot"],
+    "startHint": MANIFEST.get("start_hint", ""),
+    "keyHint": MANIFEST.get("key_hint", ""),
+}
+
+
+def all_targets():
+    """Every registered target name (used by the `attack` launcher for --all)."""
+    return list(_targets)

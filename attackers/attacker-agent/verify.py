@@ -21,7 +21,7 @@ import lib.llm as llm
 import lib.memory as mem
 from lib.judge import CANARIES, impact_of, judge
 from lib.promote import to_regression_yaml
-from lib.target import Conversation, sleep, target_info
+from lib.target import MANIFEST, Conversation, sleep, target_info
 
 RUNS = int(os.environ.get("REPRO_RUNS", 3))
 MIN = int(os.environ.get("REPRO_MIN", 3))  # "3 of 3" — a bug must be repeatable, not a one-off
@@ -148,8 +148,8 @@ def main():
         repro = (f.get("verification") or {}).get("reproduced", "-")
         print(f"   {f['id']:<20} {f['goal']:<18} {repro:<7} {badge}  {c.dim(f.get('aivssHint', ''))}")
     print(f"\n  {c.bold('confirmed:')} {len(confirmed)}/{len(candidates)} → {c.dim(str(mem.paths['REGRESSION']) + '/')}")
-    key_var = "CHUNGUS_TARGET_KEY" if os.environ.get("TARGET_PROFILE") == "chungus" else "CHUNGUS_BANK_TARGET_KEY"
-    key_val = "chungus-lab-key" if os.environ.get("TARGET_PROFILE") == "chungus" else "chungus-bank-lab-key"
+    key_var = MANIFEST["key_env"]
+    key_val = MANIFEST["key_default"]
     print(c.dim(f"  run the promoted suite:  export {key_var}={key_val}; cd campaign/regression && "
                 "npx -y promptfoo@latest eval -c <id>.gen.yaml --no-cache\n"))
 
