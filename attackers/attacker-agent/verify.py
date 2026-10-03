@@ -21,7 +21,7 @@ import lib.llm as llm
 import lib.memory as mem
 from lib.judge import CANARIES, impact_of, judge
 from lib.promote import to_regression_yaml
-from lib.target import MANIFEST, Conversation, sleep, target_info
+from lib.target import MANIFEST, Conversation, TransportError, sleep, target_info
 
 RUNS = int(os.environ.get("REPRO_RUNS", 3))
 MIN = int(os.environ.get("REPRO_MIN", 3))  # "3 of 3" — a bug must be repeatable, not a one-off
@@ -45,26 +45,31 @@ def _now():
 
 
 def replay_once(finding):
-    """Replay a saved transcript once, from a clean session, and say whether the goal leaked again."""
+    """Replay a saved transcript once from a clean session. Returns 'hit' | 'miss' (raises TransportError)."""
     convo = Conversation()
     for t in finding["transcript"]:
-        convo.say(t["user"])
+        convo.say(t["user"])  # TransportError propagates — see _safe_replay
         sleep(80)
-    return judge(convo, finding["goal"])["hit"]
+    return "hit" if judge(convo, finding["goal"])["hit"] else "miss"
 
 
 def _safe_replay(finding):
+    """One replay, classified. A network failure is 'transport', NOT a failed reproduction."""
     try:
         return replay_once(finding)
-    except Exception:  # noqa: BLE001
-        return False
+    except TransportError:
+        return "transport"
+    except Exception:  # noqa: BLE001 — a genuine replay error is treated as a non-reproduction
+        return "miss"
 
 
 def reproduce(finding):
-    """Reproduce N times IN PARALLEL — independent clean sessions, all at once (the "parallel process")."""
+    """Reproduce N times IN PARALLEL — independent clean sessions. Returns (hits, transports)."""
     with ThreadPoolExecutor(max_workers=RUNS) as pool:
         results = list(pool.map(lambda _: _safe_replay(finding), range(RUNS)))
-    return sum(1 for r in results if r)  # how many of RUNS leaked
+    hits = sum(1 for r in results if r == "hit")
+    transports = sum(1 for r in results if r == "transport")
+    return hits, transports
 
 
 def baseline_is_agentic(finding):
@@ -98,10 +103,34 @@ def main():
         print(f"  {c.bold(finding['id'])}  {finding['title']}")
 
         # 1 · reproduce (parallel, clean sessions)
-        hits = reproduce(finding)
+        hits, transports = reproduce(finding)
+        if transports and hits < MIN:
+            # Network trouble, not a result. Retry the whole set once before we judge anything.
+            print(f"   reproduce  {c.y(f'{hits}/{RUNS}')} {c.dim(f'({transports} transport failure(s) — retrying)')}")
+            hits2, transports = reproduce(finding)
+            hits = max(hits, hits2)
+
+        # A finding we still could not fully reach is parked as TRANSPORT — never REJECTED. It stays
+        # a candidate in findings/ and is re-verified on the next run, when the target is back.
+        if transports and hits < MIN:
+            finding["status"] = "TRANSPORT"
+            finding["verifiedAt"] = _now()
+            finding["verification"] = {
+                "reproduced": f"{hits}/{RUNS}", "bar": f"{MIN}/{RUNS}",
+                "transport": f"{transports}/{RUNS}", "note": "target unreachable during replay — not scored",
+            }
+            finding["evidence_ladder"] = "claimed"
+            mem.save_finding(finding)
+            print(f"   reproduce  {c.y(f'{hits}/{RUNS}')} {c.dim(f'({transports}/{RUNS} could not reach target)')}")
+            print(f"   verdict    {c.y('TRANSPORT')} {c.dim('(network failures — left open, re-verify later)')}")
+            mem.journal(f"TRANSPORT {finding['id']} — {transports}/{RUNS} replays could not reach the target")
+            sleep(DELAY)
+            continue
+
         reproduced = hits >= MIN
         tag = c.g(f"{hits}/{RUNS}") if reproduced else c.r(f"{hits}/{RUNS}")
-        print(f"   reproduce  {tag} {c.dim('(parallel, fresh sessions)')}")
+        note = "(parallel, fresh sessions)" if not transports else f"({transports} transport retr{'y' if transports == 1 else 'ies'} recovered)"
+        print(f"   reproduce  {tag} {c.dim(note)}")
 
         # 2 · gate
         impact = impact_of(finding["goal"])
@@ -144,7 +173,12 @@ def main():
     print(c.bold("\n  findings"))
     print(f"   {'id':<20} {'goal':<18} {'repro':<7} verdict     AIVSS hint")
     for f in candidates:
-        badge = c.g("CONFIRMED") if f["status"] == "CONFIRMED" else c.r("REJECTED ")
+        if f["status"] == "CONFIRMED":
+            badge = c.g("CONFIRMED")
+        elif f["status"] == "TRANSPORT":
+            badge = c.y("TRANSPORT")
+        else:
+            badge = c.r("REJECTED ")
         repro = (f.get("verification") or {}).get("reproduced", "-")
         print(f"   {f['id']:<20} {f['goal']:<18} {repro:<7} {badge}  {c.dim(f.get('aivssHint', ''))}")
     print(f"\n  {c.bold('confirmed:')} {len(confirmed)}/{len(candidates)} → {c.dim(str(mem.paths['REGRESSION']) + '/')}")

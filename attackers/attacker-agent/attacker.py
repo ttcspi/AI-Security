@@ -23,11 +23,12 @@ import lib.memory as mem
 from lib.judge import impact_of, judge
 from lib.planner import pick_family, record, summarize
 from lib.strategies import FAMILIES, STRATEGIES, by_family
-from lib.target import Conversation, health, sleep, target_info
+from lib.target import Conversation, TransportError, health, sleep, target_info
 
 EPISODES = int(os.environ.get("EPISODES", 9))
 MAX_TURNS = int(os.environ.get("MAX_TURNS", 4))
 DELAY = float(os.environ.get("ATTACK_DELAY_MS", 600))
+MAX_TRANSPORT_FAILS = int(os.environ.get("MAX_TRANSPORT_FAILS", 3))  # consecutive before we stop
 
 
 class _C:
@@ -75,7 +76,12 @@ def attack(strategy, ep):
             break
 
         sys.stdout.write(c.dim("    → you: ") + nxt[:96] + ("…" if len(nxt) > 96 else "") + "\n")
-        turn = convo.say(nxt)
+        try:
+            turn = convo.say(nxt)
+        except TransportError as e:
+            # We could not reach the target. That is not a miss — it is no result at all.
+            mem.trace({"ep": ep, "step": "transport", "strategy": strategy["id"], "turn": t + 1, "reason": str(e)})
+            return {"hit": False, "transport": True, "reason": str(e), "convo": convo, "turnsSent": turns_sent}
         turns_sent += 1
         sys.stdout.write(c.dim(f"    ← {target_info['bot'].lower()}: ") + " ".join(str(turn["reply"]).split())[:96] + "…\n")
         sleep(DELAY)
@@ -115,6 +121,7 @@ def main():
     register = mem.load_register()
     done = set()  # strategies fully attempted (found or exhausted)
     found = []
+    consecutive_transport = 0  # network blips in a row; stop the run if the target drops out
     mem.journal(
         f"campaign start · target model {h.get('model')} · attacker "
         f"{llm.info()['model'] if llm.available() else 'static'}"
@@ -149,6 +156,21 @@ def main():
             print(c.r(f"  attack error: {e}"))
             done.add(strategy["id"])
             continue
+
+        # TRANSPORT — the target was unreachable. Leave the strategy OPEN and teach the planner
+        # nothing: a network failure is not evidence either way. Stop if it keeps happening.
+        if result.get("transport"):
+            consecutive_transport += 1
+            print(c.y(f"  … transport error — {result['reason']}") +
+                  c.dim(f"  (left {strategy['id']} open, not scored)"))
+            mem.journal(f"TRANSPORT {strategy['id']} ({strategy['goal']}) — {result['reason']}")
+            if consecutive_transport >= MAX_TRANSPORT_FAILS:
+                print(c.r(f"\n  {MAX_TRANSPORT_FAILS} transport failures in a row — is {target_info['name']} "
+                          f"still up? Stopping so nothing is wrongly scored as a miss.\n"))
+                break
+            sleep(DELAY)
+            continue
+        consecutive_transport = 0
 
         # REINFORCE — update the planner, memory, and (on a hit) write a candidate finding.
         record(register, strategy["family"], result["hit"])

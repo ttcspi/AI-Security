@@ -12,6 +12,7 @@
 import json
 import os
 import re
+import socket
 import time
 import urllib.error
 import urllib.request
@@ -46,37 +47,80 @@ def sleep(ms: float) -> None:
     time.sleep(ms / 1000)
 
 
-def _post(messages, session_id):
-    """One HTTP call to the target. Retries politely on the target's 429 rate limit (Retry-After)."""
-    for _ in range(6):
-        body = json.dumps({"model": TARGET_MODEL, "messages": messages, "session_id": session_id}).encode()
-        req = urllib.request.Request(
-            TARGET_URL,
-            data=body,
-            method="POST",
-            headers={"Content-Type": "application/json", "Authorization": f"Bearer {TARGET_KEY}"},
-        )
+# --- Transport: network trouble is NOT a test result ----------------------------------
+# A canary that never leaks is a finding about the target. A target we could not reach, a
+# timeout, a rate limit, or a 5xx is a finding about the *network* — it says nothing about
+# whether the agent is vulnerable. We raise TransportError for those so the campaign and the
+# verifier can keep the behavior OPEN instead of scoring it as a miss / rejection.
+TIMEOUT_S = float(os.environ.get("TARGET_TIMEOUT_S", 90))  # one tool-calling LLM turn can be slow
+MAX_RETRIES = int(os.environ.get("TARGET_RETRIES", 5))
+_BACKOFF_S = [0.2, 0.4, 0.8, 1.6, 3.2]
+_RETRYABLE_STATUS = {502, 503, 504}
+
+
+class TransportError(RuntimeError):
+    """The target could not be reached or did not answer cleanly. Not a verdict on the agent."""
+
+    def __init__(self, message, retryable=False, retry_after=None):
+        super().__init__(message)
+        self.retryable = retryable
+        self.retry_after = retry_after  # seconds the server asked us to wait (429), else None
+
+
+def _request_once(url, body, method):
+    """One HTTP round-trip. Returns (status, text) on a clean response, else raises TransportError."""
+    headers = {"Authorization": f"Bearer {TARGET_KEY}"}
+    if body is not None:
+        headers["Content-Type"] = "application/json"
+    req = urllib.request.Request(url, data=body, method=method, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=TIMEOUT_S) as resp:
+            return resp.status, resp.read().decode()
+    except urllib.error.HTTPError as e:
+        status = e.code
+        text = e.read().decode(errors="replace")
+        if status == 429:
+            wait = float(e.headers.get("retry-after") or 2) + 0.2
+            raise TransportError("target rate-limited (HTTP 429)", retryable=True, retry_after=wait)
+        if status in _RETRYABLE_STATUS:
+            raise TransportError(f"target HTTP {status} (transient)", retryable=True)
+        # Any other HTTP status is a server/protocol failure, not a leak verdict — do not retry.
         try:
-            with urllib.request.urlopen(req) as resp:
-                text = resp.read().decode()
-                status = resp.status
-        except urllib.error.HTTPError as e:
-            status = e.code
-            if status == 429:
-                wait = float(e.headers.get("retry-after") or 2)
-                sleep((wait + 0.2) * 1000)
-                continue
-            text = e.read().decode(errors="replace")
-            try:
-                err = json.loads(text).get("error", {}).get("message")
-            except json.JSONDecodeError:
-                err = text[:200]
-            raise RuntimeError(f"target {status}: {err or text[:200]}")
+            err = json.loads(text).get("error", {}).get("message")
+        except (json.JSONDecodeError, AttributeError):
+            err = None
+        raise TransportError(f"target HTTP {status}: {err or text[:200]}")
+    except (urllib.error.URLError, TimeoutError, ConnectionError, socket.timeout) as e:
+        # Connection refused, DNS failure, read timeout, reset mid-flight — all retryable.
+        reason = getattr(e, "reason", e)
+        raise TransportError(f"target unreachable: {reason}", retryable=True)
+
+
+def _send(url, body, method="POST"):
+    """Retry a request on transport trouble with backoff, then return parsed JSON or raise TransportError."""
+    last = None
+    for attempt in range(MAX_RETRIES + 1):
+        try:
+            status, text = _request_once(url, body, method)
+        except TransportError as e:
+            last = e
+            if not e.retryable or attempt == MAX_RETRIES:
+                raise
+            wait = e.retry_after if e.retry_after is not None else _BACKOFF_S[min(attempt, len(_BACKOFF_S) - 1)]
+            time.sleep(wait)
+            continue
         try:
             return json.loads(text)
         except json.JSONDecodeError:
-            raise RuntimeError(f"target returned non-JSON ({status}): {text[:200]}")
-    raise RuntimeError("target stayed rate-limited after several retries — slow down (raise ATTACK_DELAY_MS)")
+            # A 200 with a broken body is a protocol failure, not a result — surface it, do not retry.
+            raise TransportError(f"target returned non-JSON ({status}): {text[:200]}")
+    raise last or TransportError("transport failure")
+
+
+def _post(messages, session_id):
+    """One chat call to the target. Transport trouble raises TransportError (see above)."""
+    body = json.dumps({"model": TARGET_MODEL, "messages": messages, "session_id": session_id}).encode()
+    return _send(TARGET_URL, body, "POST")
 
 
 class Conversation:
@@ -108,10 +152,7 @@ class Conversation:
 def health():
     """A one-shot health check so a run fails fast with a clear message instead of a wall of errors."""
     base = re.sub(r"/v1/.*$", "", TARGET_URL)
-    with urllib.request.urlopen(f"{base}/health") as resp:
-        if resp.status != 200:
-            raise RuntimeError(f"health {resp.status}")
-        return json.loads(resp.read().decode())  # { ok, model, hasKey }
+    return _send(f"{base}/health", None, "GET")  # { ok, model, hasKey }; raises TransportError if down
 
 
 # Display names + startup hints for the active target, so logs and the attacker prompt name the right bot.
