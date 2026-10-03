@@ -52,6 +52,23 @@ Start the target(s) first (see `../../targets/`), then use the `./attack` launch
 The plain scripts still work (`TARGET=chungus-bank python3 attacker.py`). Tuning knobs (`EPISODES`,
 `MAX_TURNS`, `ATTACK_DELAY_MS`, `REPRO_RUNS`, …) are env vars, e.g. `EPISODES=3 ./attack start chungus-bank`.
 
+## Transport vs. true result
+
+The agent separates **network trouble from a verdict about the target**. A timeout, a refused connection,
+a 5xx, or a rate limit is retried with backoff (`TARGET_TIMEOUT_S`, default 90s; `TARGET_RETRIES`, default 5)
+and then raised as a `TransportError` — it is **never** scored as a "held"/miss or a rejection. During a
+campaign such a strategy stays **open**; after `MAX_TRANSPORT_FAILS` (default 3) in a row the run stops so
+nothing is mis-scored. During `verify`, a replay that can't reach the target is retried once, then parked as
+`TRANSPORT` (still a candidate, re-verified next run) rather than `REJECTED`.
+
+## Tests
+
+No third-party deps — standard-library `unittest`. From this directory:
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
 ## Targets
 
 | Target         | Port | Strategy pack                         |
